@@ -1,0 +1,50 @@
+<!DOCTYPE html><meta charset="utf-8">
+<title>Pi-Zero Wi-Fi</title>
+<style>
+table { border-collapse: collapse; font-family: sans-serif }
+td,th { padding: .4em .7em; border: 1px solid #ccc; }
+button { padding: .2em .8em; }
+</style>
+
+<h1>Available networks</h1>
+<table id="aps"><thead>
+ <tr><th>SSID</th><th>Signal</th><th>Security</th><th>Action</th></tr>
+</thead><tbody></tbody></table>
+
+<script>
+async function loadAPs() {
+  const res  = await fetch('api/scan.php');
+  const aps  = await res.json();
+  const body = document.querySelector('#aps tbody');
+  body.innerHTML = '';
+
+  aps.sort((a, b) => b.sig - a.sig).forEach(ap => {
+    const tr = body.insertRow();
+    tr.insertCell().textContent = ap.ssid;
+    tr.insertCell().textContent = ap.sig + '%';
+    tr.insertCell().textContent = ap.sec;
+    const btn = document.createElement('button');
+    btn.textContent = 'Connect';
+    btn.onclick = () => connect(ap);
+    tr.insertCell().appendChild(btn);
+  });
+}
+
+async function connect(ap) {
+  let password = '';
+  if (ap.sec !== 'OPEN') {
+    password = prompt('Password for ' + ap.ssid + ':', '');
+    if (password === null) return; // cancelled
+  }
+  const fd = new FormData();
+  fd.append('ssid',     ap.ssid);
+  fd.append('password', password);
+
+  const res = await fetch('api/connect.php', { method: 'POST', body: fd });
+  const j   = await res.json();
+  alert(j.output || 'Done (exit ' + j.status + ')');
+  loadAPs();     // refresh list
+}
+
+loadAPs();
+</script>
