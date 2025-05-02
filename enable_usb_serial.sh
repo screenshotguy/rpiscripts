@@ -1,44 +1,90 @@
 #!/usr/bin/env bash
+#
+# usb_serial_setup.sh – enable USB-gadget serial (ttyGS0) on RPi Zero W 2
+#
+#   • Puts     dtoverlay=dwc2,dr_mode=peripheral    inside [all]
+#   • Deletes  dtoverlay=dwc2,dr_mode=host          if present anywhere
+#   • Adds     modules-load=dwc2,g_serial console=ttyGS0,115200
+#       to /boot/firmware/cmdline.txt (after rootwait, single line kept)
+#   • Enables  serial-getty@ttyGS0.service
+#
+# Safe-guards:
+#   – automatic sudo re-exec if not root
+#   – timestamped .bak copies of both files
+#   – idempotent: you can run it again without duplicates
+#
+set -euo pipefail
 
-set -e
-
-echo "=== 1) Ensuring dtoverlay=dwc2 is set in /boot/firmware/config.txt ==="
-if grep -q "dtoverlay=dwc2" /boot/firmware/config.txt; then
-    echo "dtoverlay=dwc2 already present in /boot/firmware/config.txt"
-else
-    echo "dtoverlay=dwc2" | sudo tee -a /boot/firmware/config.txt
-    echo "Added dtoverlay=dwc2 to /boot/firmware/config.txt"
+##############################
+# run as root (or sudo)
+##############################
+if [[ $EUID -ne 0 ]]; then
+  exec sudo -- "$0" "$@"
 fi
 
-echo "=== 2) Backing up and modifying /boot/firmware/cmdline.txt ==="
-# Make a backup
-sudo cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
+CONFIG=/boot/firmware/config.txt
+CMDLINE=/boot/firmware/cmdline.txt
+ts="$(date +%Y%m%d%H%M%S)"
 
-# Read the existing cmdline into a variable
-current_line=$(cat /boot/firmware/cmdline.txt)
+echo "=== Backing up config.txt and cmdline.txt ==="
+cp "$CONFIG"  "${CONFIG}.bak.${ts}"
+cp "$CMDLINE" "${CMDLINE}.bak.${ts}"
 
-# Remove references to GPIO serial console, e.g. console=serial0,115200
-current_line=$(echo "$current_line" | sed 's/console=serial0,[0-9]*//g')
+########################################
+# 1. CONFIG.TXT  –  keep gadget, remove host
+########################################
+echo "=== Cleaning host-only dwc2 lines in config.txt ==="
+# delete any line that explicitly forces host mode
+sed -i '/^dtoverlay=dwc2,.*dr_mode=host$/d' "$CONFIG"
 
-# Remove any existing references to modules-load= that mention dwc2,g_serial
-# (in case we tried partial setup before)
-current_line=$(echo "$current_line" | sed 's/modules-load=[^ ]*//g')
+# ensure an [all] section exists
+if ! grep -q '^\[all\]' "$CONFIG"; then
+  echo -e "\n[all]" >> "$CONFIG"
+fi
 
-# Remove any existing console=ttyGS0 references
-current_line=$(echo "$current_line" | sed 's/console=ttyGS0,[0-9]*//g')
+# does [all] already contain a peripheral dwc2 line?
+has_gadget=$(
+  awk '
+    /^\[/   { sect=$0; next }
+    /dtoverlay=dwc2/ && sect=="[all]" && $0 !~ /dr_mode=host/ { found=1 }
+    END { print (found ? "yes" : "no") }
+  ' "$CONFIG"
+)
 
-# Insert modules-load=dwc2,g_serial console=ttyGS0,115200 right after 'rootwait'
-# This is a simplistic approach assuming 'rootwait' is definitely in your cmdline
-updated_line=$(echo "$current_line" \
-    | sed 's/\(rootwait\)/\1 modules-load=dwc2,g_serial console=ttyGS0,115200/g')
+if [[ $has_gadget == "no" ]]; then
+  echo "Adding peripheral-mode overlay to [all]"
+  sed -i '/^\[all\]/a dtoverlay=dwc2,dr_mode=peripheral' "$CONFIG"
+else
+  echo "Peripheral overlay already present in [all]"
+fi
 
-# Clean up extra spaces
-updated_line=$(echo "$updated_line" | tr -s ' ' | sed 's/^ *//;s/ *$//')
+########################################
+# 2. CMDLINE.TXT  –  insert gadget parameters
+########################################
+echo "=== Updating cmdline.txt ==="
+line="$(cat "$CMDLINE")"
 
-# Write it back
-echo "$updated_line" | sudo tee /boot/firmware/cmdline.txt > /dev/null
+# drop any existing serial0 console, duplicate modules-load, or old ttyGS0
+line="$(sed -E '
+  s#console=serial0,[0-9]+ ?##g;
+  s#modules-load=[^ ]* ?##g;
+  s#console=ttyGS0,[0-9]+ ?##g
+' <<<"$line")"
 
-echo "=== 3) Enabling serial-getty@ttyGS0.service ==="
-sudo systemctl enable serial-getty@ttyGS0.service
+# insert after rootwait if not already present
+if [[ $line != *"modules-load=dwc2,g_serial"* ]]; then
+  line="$(sed 's/\brootwait\b/& modules-load=dwc2,g_serial console=ttyGS0,115200/' <<<"$line")"
+fi
 
-echo "=== All done! Please reboot to apply changes. ==="
+# squeeze whitespace
+line="$(xargs <<<"$line")"
+
+echo "$line" > "$CMDLINE"
+
+########################################
+# 3. Enable systemd getty on GS0
+########################################
+echo "=== Enabling serial-getty@ttyGS0.service ==="
+systemctl enable serial-getty@ttyGS0.service
+
+echo "=== All done – reboot to activate USB serial gadget! ==="
