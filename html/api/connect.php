@@ -1,30 +1,23 @@
 <?php
-header('Content-Type: application/json');
+declare(strict_types=1);
+header('Content-Type: text/plain; charset=utf-8');
+header('X-Accel-Buffering: no');         // nginx: disable buffering
+@ob_flush(); @flush();                   // send headers
 
 $ssid = $_POST['ssid']     ?? '';
 $pass = $_POST['password'] ?? '';
 
-if ($ssid === '') {
-    http_response_code(400);
-    echo '{"error":"Missing SSID"}';
-    exit;
-}
+if($ssid===''){http_response_code(400);echo"Missing SSID\n";exit;}
 
 $ssid_esc = escapeshellarg($ssid);
+$cmd = ($pass==='')
+      ? "nmcli --wait 20 device wifi connect $ssid_esc"
+      : "nmcli --wait 20 device wifi connect $ssid_esc password ".escapeshellarg($pass);
 
-if ($pass === '') {
-    // Open network
-    $cmd = "nmcli device wifi connect $ssid_esc";
-} else {
-    $pass_esc = escapeshellarg($pass);
-    $cmd = "nmcli device wifi connect $ssid_esc password $pass_esc";
+$proc = popen($cmd.' 2>&1','r');
+while(!feof($proc)){
+    echo rtrim(fgets($proc))."\n";
+    @ob_flush(); @flush();               // stream line to client
 }
-
-exec($cmd . ' 2>&1', $out, $rc);
-
-echo json_encode([
-    'cmd'    => $cmd,
-    'output' => implode("\n", $out),
-    'status' => $rc
-]);
+$pstat = pclose($proc);
 

@@ -2,52 +2,242 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Pi-Zero Wi-Fi</title>
+<title>SmartStart Wifi Setup</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<!-- Fonts & helpers -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  table { border-collapse: collapse; font-family: sans-serif }
-  td,th { padding: .4em .7em; border: 1px solid #ccc; }
-  button { padding: .2em .8em; }
+/* ───── CSS TOKENS ─────────────────────────────────────────────── */
+:root{
+  --bg: #f6f7fa;           --card:#fff;         --fg:#111;
+  --accent:#2061ff;        --accent-2:#edf2ff;  --border:#d7dce4;
+  --radius:12px;           --shadow:0 3px 10px rgb(0 0 0 /.06);
+}
+@media (prefers-color-scheme: dark){
+ :root{
+  --bg:#0e1014;           --card:#181a1f;        --fg:#e2e4e9;
+  --accent:#5c8bff;       --accent-2:#1e2330;     --border:#2a2f3b;
+  --shadow:0 4px 14px rgb(0 0 0 /.35);
+ }
+}
+
+/* ───── RESET / BASE ──────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--fg);
+          font:15px/1.45 'Inter',system-ui,sans-serif;}
+
+/* ───── FLEX CONTAINER LAYOUT ─────────────────────────────────── */
+body{display:flex;flex-direction:column;min-height:100%;}
+main{flex:1;width:clamp(320px,90vw,1100px);margin:auto;padding:1rem}
+
+/* ───── HEADER / STATUS ───────────────────────────────────────── */
+header{position:sticky;top:0;z-index:10;background:var(--card);
+        box-shadow:var(--shadow);display:flex;align-items:center;
+        gap:.9rem;padding:.65rem 1rem;border-bottom:1px solid var(--border);}
+h1{font-size:clamp(18px,4.5vw,22px);font-weight:600;margin-right:auto}
+#status{display:flex;flex-wrap:wrap;gap:.9rem;font-size:.88rem}
+#status span{display:inline-flex;align-items:center;gap:.35rem;opacity:.85}
+#status svg{width:17px;height:17px;stroke-width:2}
+#btn-forget{background:transparent;border:none;color:var(--accent);
+            display:flex;align-items:center;gap:.35rem;font-size:.86rem;
+            cursor:pointer;padding:.2em .4em;border-radius:6px}
+#btn-forget:hover{background:var(--accent-2)}
+
+/* ───── NETWORK LIST ──────────────────────────────────────────── */
+section.card{background:var(--card);border:1px solid var(--border);
+             border-radius:var(--radius);box-shadow:var(--shadow);
+             padding:1rem;margin-top:1rem;animation:fade-in .4s ease-out}
+@keyframes fade-in{from{opacity:0;transform:translateY(8px)}
+                   to{opacity:1;transform:none}}
+
+#net-header{display:flex;align-items:center;gap:.6rem;margin-bottom:.8rem}
+#net-header button{margin-left:auto}
+
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;
+       font:500 14px/1 'Inter';padding:.46em 1em;cursor:pointer;
+       transition:background .2s ease}
+button:hover:not([disabled]){background:color-mix(in srgb,var(--accent) 90%,#000)}
+button[disabled]{opacity:.45;cursor:default}
+
+/* table style for ≥ 641px */
+@media(min-width:641px){
+  table{width:100%;border-collapse:collapse;font-size:.93rem}
+  th,td{padding:.55em .7em;border-bottom:1px solid var(--border)}
+  thead th{font-weight:600;text-align:left}
+  tbody tr:hover{background:var(--accent-2)}
+}
+
+/* card-tile style for ≤ 640px  */
+@media(max-width:640px){
+  table thead{display:none}
+  tr,td{display:block;width:100%}
+  tbody tr{background:var(--card);border:1px solid var(--border);
+           border-radius:var(--radius);margin-bottom:.65rem;padding:.6rem;
+           box-shadow:var(--shadow)}
+  td:not(:last-child){margin-bottom:.4rem}
+  td:nth-child(1){font-weight:600}
+  td:nth-child(2)::before{content:"Signal: ";font-weight:500}
+  td:nth-child(3)::before{content:"Security: ";font-weight:500}
+  td:nth-child(4){text-align:right}
+}
+
+/* signal bar mask (unchanged) */
+.signal-bars{display:inline-block;width:22px;height:15px;background:currentColor;
+             mask:url('data:image/svg+xml;utf8,\
+<svg xmlns="http://www.w3.org/2000/svg" viewBox=\"0 0 20 14\">\
+<g stroke=\"black\" stroke-width=\"2\" fill=\"white\">\
+<line x1=\"2\" y1=\"14\" x2=\"2\" y2=\"8\"/>\
+<line x1=\"8\" y1=\"14\" x2=\"8\" y2=\"5\"/>\
+<line x1=\"14\" y1=\"14\" x2=\"14\" y2=\"2\"/>\
+<line x1=\"20\" y1=\"14\" x2=\"20\" y2=\"0\"/>\
+</g></svg>') center/20px 14px no-repeat}
+
+/* ───── TOASTS ───────────────────────────────────────────────── */
+.toast{position:fixed;bottom:1.2rem;left:50%;translate:-50% 0;
+       background:var(--card);color:var(--fg);border:1px solid var(--border);
+       border-radius:10px;padding:.55em 1.1em;font-size:.88rem;
+       box-shadow:var(--shadow);animation:toast-in .25s forwards;}
+@keyframes toast-in{from{opacity:0;translate:-50% 20px}to{opacity:.96}}
+.toast-stack .toast{bottom:calc(1.2rem + var(--i)*3.1rem)} /* stack effect */
+/* Micromodal essentials (copied from dist/micromodal.css) */
+.modal      {display:none;position:fixed;top:0;left:0;width:100%;height:100%}
+.modal.is-open {display:block}
+.modal__overlay{background:rgba(0,0,0,.45);width:100%;height:100%;
+                display:flex;align-items:center;justify-content:center}
+.modal__container{background:var(--card);max-width:92%;width:420px;
+                  border-radius:var(--radius);box-shadow:var(--shadow);
+                  padding:1.1rem}
 </style>
 </head>
+
 <body>
-<h1>Available networks</h1>
-<table id="aps"><thead>
-  <tr><th>SSID</th><th>Signal</th><th>Security</th><th>Action</th></tr>
-</thead><tbody></tbody></table>
+<header>
+  <h1>SmartStart Setup</h1>
+  <div id="status">
+    <span id="s-ssid"  title="Current network"><i data-feather="wifi"></i> —</span>
+    <span id="s-ip"    title="IP address"><i data-feather="globe"></i> —</span>
+    <span id="s-sig"   title="Signal &amp; quality"><i data-feather="bar-chart-2"></i> —</span>
+    <span id="s-state" title="Connection state"><i data-feather="activity"></i> —</span>
+  </div>
+  <button id="btn-forget" title="Delete saved profile">
+    <i data-feather="trash-2"></i><span>Forget</span>
+  </button>
+</header>
+
+<main>
+  <section class="card">
+    <div id="net-header">
+      <h2 style="font-size:1.05rem;font-weight:600">Available networks</h2>
+      <button onclick="showHiddenModal()" style="background:transparent;color:var(--accent);font-weight:500">
+        <i data-feather="plus-circle"></i> Hidden SSID
+      </button>
+    </div>
+
+    <table id="aps"><thead>
+      <tr><th>SSID</th><th>Signal</th><th>Security</th><th>Action</th></tr>
+    </thead><tbody></tbody></table>
+  </section>
+</main>
+
+<!-- Hidden SSID modal (unchanged structure) -->
+<div class="modal micromodal-slide" id="modal-hidden" aria-hidden="true">
+  <div class="modal__overlay" tabindex="-1" data-micromodal-close>
+    <div class="modal__container" role="dialog" aria-modal="true">
+      <header><h3>Connect to hidden network</h3></header>
+      <main>
+        <input id="h-ssid" placeholder="SSID" style="width:100%;margin:.6rem 0;padding:.5em">
+        <input id="h-pass" placeholder="Password (leave blank if open)" type="password"
+               style="width:100%;margin-bottom:.8rem;padding:.5em">
+      </main>
+      <footer style="display:flex;gap:.8rem;justify-content:flex-end">
+        <button class="modal__btn" data-micromodal-close>Cancel</button>
+        <button class="modal__btn" id="h-connect" style="background:var(--accent)">Connect</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- JS helpers -->
+<script src="https://cdn.jsdelivr.net/npm/micromodal@0.4.10/dist/micromodal.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.1/dist/feather.min.js"></script>
+<script>feather.replace()</script>
 
 <script>
-async function loadAPs() {
-  const aps = await (await fetch('api/scan.php')).json();
-  const body = document.querySelector('#aps tbody');
-  body.innerHTML = '';
+/* ───── utilities (unchanged) ───── */
+const toast = msg=>{
+  const n=document.createElement('div');n.className='toast';
+  n.textContent=msg;document.body.appendChild(n);
+  // stack: assign data-index to shift upward
+  document.querySelectorAll('.toast').forEach((t,i)=>t.style.setProperty('--i',i));
+  setTimeout(()=>n.remove(),4000);
+};
+async function fetchJSON(url,opts){const r=await fetch(url,opts);return r.json();}
+
+/* ───── STATUS PANEL ───── */
+async function refreshStatus(){
+  const s = await fetchJSON('api/status.php?ts='+Date.now());
+  document.querySelector('#s-ssid').innerHTML  =`<i data-feather="wifi"></i> ${s.ssid||'—'}`;
+  document.querySelector('#s-ip').innerHTML    =`<i data-feather="globe"></i> ${s.ip||'—'}`;
+  document.querySelector('#s-sig').innerHTML   =
+    `<span class="signal-bars"></span> ${s.sig? s.sig+' dBm':'—'}`;
+  document.querySelector('#s-state').innerHTML =
+    `<i data-feather="activity"></i> ${s.state}`;
+  feather.replace(document.querySelector('#status'));
+  const forget=document.getElementById('btn-forget');
+  if(s.ssid){forget.style.display='flex';forget.onclick=()=>forgetNet(s.ssid);}
+  else forget.style.display='none';
+}
+
+/* ───── NETWORK SCAN ───── */
+async function loadAPs(){
+  const aps=await fetchJSON('api/scan.php?ts='+Date.now());
+  const body=document.querySelector('#aps tbody');body.innerHTML='';
   aps.sort((a,b)=>b.sig-a.sig).forEach(ap=>{
-    const tr = body.insertRow();
-    tr.insertCell().textContent = ap.ssid;
-    tr.insertCell().textContent = ap.sig + '%';
-    tr.insertCell().textContent = ap.sec;
-    const btn = document.createElement('button');
-    btn.textContent = 'Connect';
-    btn.onclick = ()=>connect(ap);
-    tr.insertCell().appendChild(btn);
+    const tr=body.insertRow();
+    tr.insertCell().textContent=ap.ssid;
+    tr.insertCell().textContent=ap.sig+'%';
+    tr.insertCell().textContent=ap.sec;
+    const td=tr.insertCell();const b=document.createElement('button');
+    b.textContent='Connect';b.onclick=()=>connect(ap,b);td.appendChild(b);
   });
 }
 
-async function connect(ap){
-  let pw = '';
-  if (ap.sec !== 'OPEN'){
-    pw = prompt('Password for '+ap.ssid+':','');
-    if (pw===null) return;
-  }
-  const fd = new FormData();
-  fd.append('ssid', ap.ssid);
-  fd.append('password', pw);
-  const res = await fetch('api/connect.php',{method:'POST',body:fd});
-  const j   = await res.json();
-  alert(j.output || 'Done (exit '+j.status+')');
-  loadAPs();
+/* ───── CONNECT STREAM ───── */
+async function connect(ap,btn){
+  let pw='';if(ap.sec!=='OPEN'){pw=prompt('Password for '+ap.ssid+':','');if(pw===null)return;}
+  const fd=new FormData();fd.append('ssid',ap.ssid);fd.append('password',pw);
+  btn.disabled=true;btn.textContent='…';
+  const res=await fetch('api/connect.php',{method:'POST',body:fd});
+  const reader=res.body.getReader();let txt='';
+  while(true){const {value,done}=await reader.read();if(done)break;
+    txt+=new TextDecoder().decode(value);
+    toast(txt.trim().split('\n').slice(-1)[0]);}
+  btn.disabled=false;btn.textContent='Connect';loadAPs();refreshStatus();
 }
 
-loadAPs();
+/* ───── FORGET ───── */
+async function forgetNet(ssid){
+  if(!confirm('Delete saved profile for “‘'+ssid+'” ?'))return;
+  const fd=new FormData();fd.append('ssid',ssid);
+  const j=await fetchJSON('api/forget.php',{method:'POST',body:fd});
+  toast(j.output||'Done');refreshStatus();
+}
+
+/* ───── HIDDEN SSID MODAL ───── */
+function showHiddenModal(){Micromodal.show('modal-hidden');}
+document.getElementById('h-connect').onclick=()=>{
+  const ssid=document.getElementById('h-ssid').value.trim();
+  const pw=document.getElementById('h-pass').value;
+  if(!ssid){alert('SSID required');return;}
+  connect({ssid,sec:pw?'WPA2':'OPEN'},document.getElementById('h-connect'));
+  Micromodal.close('modal-hidden');
+};
+
+/* ───── BOOTSTRAP ───── */
+loadAPs();refreshStatus();setInterval(refreshStatus,5000);
 </script>
 </body>
 </html>
