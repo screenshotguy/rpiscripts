@@ -1,20 +1,34 @@
 <?php
-header('Content-Type: application/json');
+declare(strict_types=1);
 
-$cmd   = 'nmcli -t -f SSID,SECURITY,SIGNAL,CHAN device wifi list 2>/dev/null';
-$lines = array_filter(explode("\n", shell_exec($cmd)));
+// Always tell the client we’re sending UTF-8 JSON
+header('Content-Type: application/json; charset=utf-8');
 
-$out = [];
-foreach ($lines as $l) {
-    [$ssid, $sec, $sig, $chan] = array_map('trim', explode(':', $l));
-    // Skip hidden SSIDs
-    if ($ssid === '') continue;
-    $out[] = [
-        'ssid'  => $ssid,
-        'sec'   => $sec ?: 'OPEN',
-        'sig'   => (int)$sig,
-        'chan'  => $chan
+// Make sure child processes (nmcli) also speak UTF-8
+putenv('LANG=en_US.UTF-8');
+setlocale(LC_ALL, 'en_US.UTF-8');
+
+// ---------- run the scan ----------
+$raw = shell_exec('nmcli -t -f SSID,SECURITY,SIGNAL,CHAN dev wifi list');
+$aps = [];
+
+foreach (explode("\n", trim($raw)) as $line) {
+    if ($line === '') continue;
+    [$ssid, $sec, $sig, $chan] = array_map('trim', explode(':', $line));
+
+    // If the SSID isn’t valid UTF-8, guess-convert it
+    if (!mb_check_encoding($ssid, 'UTF-8')) {
+        $ssid = mb_convert_encoding($ssid, 'UTF-8', 'ISO-8859-1,Windows-1252');
+    }
+
+    $aps[] = [
+        'ssid' => $ssid ?: '(hidden)',
+        'sec'  => $sec ?: 'OPEN',
+        'sig'  => (int)$sig,
+        'chan' => $chan,
     ];
 }
-echo json_encode($out, JSON_UNESCAPED_SLASHES);
+
+// Send nice-looking JSON without \u escapes
+echo json_encode($aps, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 

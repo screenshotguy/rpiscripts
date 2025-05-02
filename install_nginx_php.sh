@@ -18,7 +18,7 @@ echo "==> Updating package index …"
 apt update -qq
 
 echo "==> Installing nginx-light + php-fpm (no recommends) …"
-apt install -y --no-install-recommends nginx-light php-fpm
+apt install -y --no-install-recommends nginx-light php-fpm php8.2-mbstring
 
 # ────────────────────────── Detect PHP version ────────────────────────────
 PHP_VER=$(ls /etc/php | sort -V | tail -n1)            # e.g. 8.2
