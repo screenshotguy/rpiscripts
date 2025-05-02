@@ -140,7 +140,7 @@ echo "<?php phpinfo(); ?>" >/var/www/html/info.php
 
 # copy web root (adjust path if needed)
 if [[ -d html ]]; then
-    mv html/* /var/www/html/ || true
+    cp -rf html/* /var/www/html/ || true
 fi
 
 # ───────────────────────── Report footprint -------------------------------
