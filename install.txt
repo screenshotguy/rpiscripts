@@ -1,0 +1,168 @@
+3 · Project tree
+pgsql
+Copy
+Edit
+/var/www/html/
+├── index.html        (AJAX frontend)
+└── api/
+    ├── scan.php      (returns JSON list of APs)
+    └── connect.php   (triggers nmcli connect)
+3.1 api/scan.php
+php
+Copy
+Edit
+<?php
+header('Content-Type: application/json');
+
+$cmd   = 'nmcli -t -f SSID,SECURITY,SIGNAL,CHAN device wifi list 2>/dev/null';
+$lines = array_filter(explode("\n", shell_exec($cmd)));
+
+$out = [];
+foreach ($lines as $l) {
+    [$ssid, $sec, $sig, $chan] = array_map('trim', explode(':', $l));
+    // Skip hidden SSIDs
+    if ($ssid === '') continue;
+    $out[] = [
+        'ssid'  => $ssid,
+        'sec'   => $sec ?: 'OPEN',
+        'sig'   => (int)$sig,
+        'chan'  => $chan
+    ];
+}
+echo json_encode($out, JSON_UNESCAPED_SLASHES);
+
+
+
+
+3.2 api/connect.php
+php
+Copy
+Edit
+<?php
+header('Content-Type: application/json');
+
+$ssid = $_POST['ssid']     ?? '';
+$pass = $_POST['password'] ?? '';
+
+if ($ssid === '') {
+    http_response_code(400);
+    echo '{"error":"Missing SSID"}';
+    exit;
+}
+
+$ssid_esc = escapeshellarg($ssid);
+
+if ($pass === '') {
+    // Open network
+    $cmd = "nmcli device wifi connect $ssid_esc";
+} else {
+    $pass_esc = escapeshellarg($pass);
+    $cmd = "nmcli device wifi connect $ssid_esc password $pass_esc";
+}
+
+exec($cmd . ' 2>&1', $out, $rc);
+
+echo json_encode([
+    'cmd'    => $cmd,
+    'output' => implode("\n", $out),
+    'status' => $rc
+]);
+
+
+
+
+
+4 · index.html (ultra-minimal frontend)
+html
+Copy
+Edit
+<!DOCTYPE html><meta charset="utf-8">
+<title>Pi-Zero Wi-Fi</title>
+<style>
+table { border-collapse: collapse; font-family: sans-serif }
+td,th { padding: .4em .7em; border: 1px solid #ccc; }
+button { padding: .2em .8em; }
+</style>
+
+<h1>Available networks</h1>
+<table id="aps"><thead>
+ <tr><th>SSID</th><th>Signal</th><th>Security</th><th>Action</th></tr>
+</thead><tbody></tbody></table>
+
+<script>
+async function loadAPs() {
+  const res  = await fetch('api/scan.php');
+  const aps  = await res.json();
+  const body = document.querySelector('#aps tbody');
+  body.innerHTML = '';
+
+  aps.sort((a, b) => b.sig - a.sig).forEach(ap => {
+    const tr = body.insertRow();
+    tr.insertCell().textContent = ap.ssid;
+    tr.insertCell().textContent = ap.sig + '%';
+    tr.insertCell().textContent = ap.sec;
+    const btn = document.createElement('button');
+    btn.textContent = 'Connect';
+    btn.onclick = () => connect(ap);
+    tr.insertCell().appendChild(btn);
+  });
+}
+
+async function connect(ap) {
+  let password = '';
+  if (ap.sec !== 'OPEN') {
+    password = prompt('Password for ' + ap.ssid + ':', '');
+    if (password === null) return; // cancelled
+  }
+  const fd = new FormData();
+  fd.append('ssid',     ap.ssid);
+  fd.append('password', password);
+
+  const res = await fetch('api/connect.php', { method: 'POST', body: fd });
+  const j   = await res.json();
+  alert(j.output || 'Done (exit ' + j.status + ')');
+  loadAPs();     // refresh list
+}
+
+loadAPs();
+</script>
+
+
+
+
+1 · Put a full PolicyKit rule in place (preferred, keeps root shells out)
+Create /etc/polkit-1/localauthority/50-local.d/10-nmcli-webui.pkla:
+
+ini
+Copy
+Edit
+[Allow www-data to manage Wi-Fi from the web UI]
+Identity=unix-user:www-data
+Action=org.freedesktop.NetworkManager.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+Identity – use the exact user that runs your PHP code.
+Check with grep ^user /etc/php/*/fpm/pool.d/www.conf.
+
+The wildcarded Action covers every NM privilege in one go;
+if you want to be laser-tight use
+Action=org.freedesktop.NetworkManager.settings.modify.system.
+
+All three Result lines must be present or PolicyKit falls back to no.
+
+Then reload PolicyKit:
+
+bash
+Copy
+Edit
+sudo systemctl restart polkit
+Test from a shell as that user:
+
+bash
+Copy
+Edit
+sudo -u www-data /usr/bin/nmcli device wifi connect "TestSSID" password "testpass"
+If it connects, the web front-end will now work too.
+
+
