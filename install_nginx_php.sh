@@ -103,6 +103,9 @@ systemctl restart nginx
 # ───────────────────────── Test page --------------------------------------
 echo "<?php phpinfo(); ?>" >/var/www/html/index.php
 
+# copy web root
+mv html/* /var/www/html/
+
 # ───────────────────────── Report footprint --------------------------------
 RSS=$(ps --no-headers -C nginx,php-fpm -o rss | awk '{sum+=$1} END{printf "%.1f", sum/1024}')
 echo -e "\n✅  Installation complete."

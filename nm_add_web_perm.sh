@@ -6,10 +6,6 @@ ResultAny=yes
 ResultInactive=yes
 ResultActive=yes
 EOF
-[Allow www-data to manage Wi-Fi from the web UI]
-Identity=unix-user:www-data
-Action=org.freedesktop.NetworkManager.*
-ResultAny=yes
-ResultInactive=yes
-ResultActive=yes
+
+systemctl restart polkit
 
