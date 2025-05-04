@@ -2,11 +2,12 @@
 raspi-config nonint do_wifi_country GB
 ifconfig wlan0 up
 
-nmcli device set usb0 managed yes
 nmcli device set wlan0 managed yes
 
 sysctl -w net.ipv4.ip_forward=1
 
+
+nmcli device set usb0 managed yes
 nmcli con delete usb0-share
 nmcli con add type ethernet ifname usb0 con-name usb0-share ip4 192.168.8.1/24
 nmcli con mod usb0-share ipv4.method shared
