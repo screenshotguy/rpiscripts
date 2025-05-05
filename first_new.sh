@@ -7,6 +7,32 @@ set -euo pipefail
 # Set country for wlan0 rfkill
 raspi-config nonint do_wifi_country GB
 
+echo "11111111111111111"
+# Ensure devices are managed
+nmcli dev set usb0 managed yes
+nmcli dev set wlan0 managed yes
+echo "22222222222222222"
+# USB profile
+nmcli con delete usb0-share 2>/dev/null || true
+nmcli con add type ethernet ifname usb0 con-name usb0-share ip4 192.168.8.1/24 autoconnect yes
+nmcli con mod usb0-share ipv4.method shared
+
+# Wi-Fi AP profile
+nmcli con delete pi_hotspot 2>/dev/null || true
+nmcli con add type wifi ifname wlan0 con-name pi_hotspot autoconnect yes ssid "nano"
+nmcli con mod pi_hotspot \
+    802-11-wireless.mode ap \
+    802-11-wireless.band bg \
+    wifi-sec.key-mgmt wpa-psk \
+    wifi-sec.psk "nanonano" \
+    ipv4.addresses 192.168.4.1/24 \
+    ipv4.method shared \
+    ipv4.never-default yes \
+    ipv6.method ignore
+
+# Set permissions
+chmod 600 /etc/NetworkManager/system-connections/*.nmconnection
+
 # Log to tmpfs
 LOG="/tmp/firstboot.log"
 echo "Starting firstboot: $(date)" | tee -a "$LOG"
