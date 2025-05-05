@@ -1,17 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
-# Check root privileges
-[[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
+SRC="/boot/firmware/cmdline.txt"
+SERIAL_DEST="/boot/firmware/cmdline_serial.txt"
+USB_DEST="/boot/firmware/cmdline_usb.txt"
+cp "$SRC" "$SERIAL_DEST"
+cp "$SRC" "$USB_DEST"
+sed -i 's/console=serial0,115200 //g' "$USB_DEST"
+sed -i 's/g_serial/g_ether/g' "$USB_DEST"
+echo "Copied and modified $SRC"
+
 
 # Set country for wlan0 rfkill
 raspi-config nonint do_wifi_country GB
 
-echo "11111111111111111"
 # Ensure devices are managed
 nmcli dev set usb0 managed yes
 nmcli dev set wlan0 managed yes
-echo "22222222222222222"
+
 # USB profile
 nmcli con delete usb0-share 2>/dev/null || true
 nmcli con add type ethernet ifname usb0 con-name usb0-share ip4 192.168.8.1/24 autoconnect yes
@@ -95,3 +101,4 @@ echo "Enabled OverlayFS and read-only boot" | tee -a "$LOG"
 
 echo "Firstboot complete: $(date). Rebooting to apply OverlayFS." | tee -a "$LOG"
 #reboot
+
