@@ -4,12 +4,6 @@ set -euo pipefail
 # Check root privileges
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
 
-# Check required commands
-REQUIRED_CMDS=(raspi-config openssl dpkg-reconfigure systemctl sed tee)
-for cmd in "${REQUIRED_CMDS[@]}"; do
-    command -v "$cmd" >/dev/null || { echo "$cmd missing"; exit 1; }
-done
-
 # Log to tmpfs
 LOG="/tmp/firstboot.log"
 echo "Starting firstboot: $(date)" | tee -a "$LOG"
@@ -45,29 +39,29 @@ KEY="${SSL_DIR}/pi.key"
 install -d -m 700 "$SSL_DIR"
 openssl req -x509 -nodes -days 3650 -newkey rsa:4096 \
     -keyout "$KEY" -out "$CRT" \
-    -subj "/CN=$(hostname -f)" \
-    -addext "subjectAltName=DNS:$(hostname -f),IP:127.0.0.1"
+    -subj "/CN=$HOSTNAME.local" \
+    -addext "subjectAltName=DNS:$HOSTNAME.local,IP:192.168.8.1"
 chmod 600 "$KEY"
 echo "Regenerated SSL certificates" | tee -a "$LOG"
 
 # Enable OverlayFS and read-only boot
-raspi-config nonint do_overlayfs 0
-raspi-config nonint do_boot_ro 0
+#raspi-config nonint do_overlayfs 0
+#raspi-config nonint do_boot_ro 0
 echo "Enabled OverlayFS and read-only boot" | tee -a "$LOG"
 
 # Add tmpfs for Nginx
-FSTAB="/etc/fstab"
-echo "tmpfs /var/lib/nginx tmpfs defaults,noatime 0 0" >> "$FSTAB"
-echo "Added tmpfs for /var/lib/nginx" | tee -a "$LOG"
+#FSTAB="/etc/fstab"
+#echo "tmpfs /var/lib/nginx tmpfs defaults,noatime 0 0" >> "$FSTAB"
+#echo "Added tmpfs for /var/lib/nginx" | tee -a "$LOG"
 
 # Install toggle script
-install -m 755 /usr/local/bin/toggle-ro-rw.sh /usr/local/bin/toggle-ro-rw.sh
-echo "Installed toggle-ro-rw.sh" | tee -a "$LOG"
+#install -m 755 /usr/local/bin/toggle-ro-rw.sh /usr/local/bin/toggle-ro-rw.sh
+#echo "Installed toggle-ro-rw.sh" | tee -a "$LOG"
 
 # Clean up
-systemctl disable firstboot
-rm /usr/local/bin/firstboot.sh
-echo "Disabled firstboot and removed script" | tee -a "$LOG"
+#systemctl disable firstboot
+#rm /usr/local/bin/firstboot.sh
+#echo "Disabled firstboot and removed script" | tee -a "$LOG"
 
 echo "Firstboot complete: $(date). Rebooting to apply OverlayFS." | tee -a "$LOG"
-reboot
+#reboot
