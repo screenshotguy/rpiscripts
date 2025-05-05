@@ -9,19 +9,20 @@ LOG="/tmp/firstboot.log"
 echo "Starting firstboot: $(date)" | tee -a "$LOG"
 
 # Set hostname
-HOSTNAME="pi-$RANDOM"
+HOSTNAME="nano"
+#HOSTNAME="nano-$RANDOM"
 echo "$HOSTNAME" > /etc/hostname
-sed -i "s/raspberrypi/$HOSTNAME/g" /etc/hosts
+#sed -i "s/nano/$HOSTNAME/g" /etc/hosts
 echo "Set hostname: $HOSTNAME" | tee -a "$LOG"
 
 # Set timezone to UTC
-ln -sf /usr/share/zoneinfo/UTC /etc/localtime
-dpkg-reconfigure -f noninteractive tzdata
-echo "Set timezone: UTC" | tee -a "$LOG"
+#ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+#dpkg-reconfigure -f noninteractive tzdata
+#echo "Set timezone: UTC" | tee -a "$LOG"
 
 # Enable SSH
-systemctl enable ssh
-echo "Enabled SSH" | tee -a "$LOG"
+#systemctl enable ssh
+#echo "Enabled SSH" | tee -a "$LOG"
 
 # Expand filesystem
 raspi-config --expand-rootfs
@@ -39,8 +40,8 @@ KEY="${SSL_DIR}/pi.key"
 install -d -m 700 "$SSL_DIR"
 openssl req -x509 -nodes -days 3650 -newkey rsa:4096 \
     -keyout "$KEY" -out "$CRT" \
-    -subj "/CN=$HOSTNAME.local" \
-    -addext "subjectAltName=DNS:$HOSTNAME.local,IP:192.168.8.1"
+    -subj "/CN=${HOSTNAME}.local" \
+    -addext "subjectAltName=DNS:${HOSTNAME}.local,IP:192.168.8.1"
 chmod 600 "$KEY"
 echo "Regenerated SSL certificates" | tee -a "$LOG"
 
