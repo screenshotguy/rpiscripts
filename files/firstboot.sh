@@ -110,9 +110,6 @@ echo "Enabled OverlayFS and read-only boot" | tee -a "$LOG"
 #install -m 755 /usr/local/bin/toggle-ro-rw.sh /usr/local/bin/toggle-ro-rw.sh
 #echo "Installed toggle-ro-rw.sh" | tee -a "$LOG"
 
-# Clean up
-#systemctl disable firstboot
-#rm /usr/local/bin/firstboot.sh
 #echo "Disabled firstboot and removed script" | tee -a "$LOG"
 
 echo "Firstboot complete: $(date). Rebooting to apply OverlayFS." | tee -a "$LOG"
@@ -124,4 +121,9 @@ systemctl disable firstboot
 rm /usr/local/bin/firstboot.sh
 
 echo F > /root/FIRST_COMPLETE
+
+Clean up
+systemctl disable firstboot
+rm /usr/local/bin/firstboot.sh
+
 reboot
