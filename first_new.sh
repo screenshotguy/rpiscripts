@@ -15,15 +15,25 @@ echo "Copied and modified $SRC"
 raspi-config nonint do_wifi_country GB
 
 # Ensure devices are managed
+#!/bin/bash
+set -euo pipefail
+
+# Ensure devices are managed
 nmcli dev set usb0 managed yes
+nmcli dev set eth0 managed yes
 nmcli dev set wlan0 managed yes
 
-# USB profile
+# Clean up conflicting profiles
+nmcli con delete usb0 2>/dev/null || true
 nmcli con delete usb0-share 2>/dev/null || true
-nmcli con add type ethernet ifname usb0 con-name usb0-share ip4 192.168.8.1/24 autoconnect yes
-nmcli con mod usb0-share ipv4.method shared
+nmcli con delete "Wired connection 1" 2>/dev/null || true
 
-# Wi-Fi AP profile
+# USB profile (named usb0)
+nmcli con add type ethernet ifname usb0 con-name usb0 ip4 192.168.8.1/24 autoconnect yes
+nmcli con mod usb0 ipv4.method shared
+nmcli con mod usb0 ipv6.method ignore
+
+# Wi-Fi AP profile (unchanged, assuming it’s in your full script)
 nmcli con delete pi_hotspot 2>/dev/null || true
 nmcli con add type wifi ifname wlan0 con-name pi_hotspot autoconnect yes ssid "nano"
 nmcli con mod pi_hotspot \
@@ -38,6 +48,7 @@ nmcli con mod pi_hotspot \
 
 # Set permissions
 chmod 600 /etc/NetworkManager/system-connections/*.nmconnection
+
 
 # Log to tmpfs
 LOG="/tmp/firstboot.log"
