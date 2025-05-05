@@ -4,6 +4,9 @@ set -euo pipefail
 # Check root privileges
 [[ $EUID -eq 0 ]] || { echo "Run as root"; exit 1; }
 
+# Set country for wlan0 rfkill
+raspi-config nonint do_wifi_country GB
+
 # Log to tmpfs
 LOG="/tmp/firstboot.log"
 echo "Starting firstboot: $(date)" | tee -a "$LOG"
