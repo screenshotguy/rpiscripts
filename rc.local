@@ -8,7 +8,7 @@ else
     echo "rc.local - Not a first run"
 fi
 
-rraspi-config nonint do_wifi_country GB
+raspi-config nonint do_wifi_country GB
 ifconfig wlan0 up
 
 nmcli device set wlan0 managed yes
