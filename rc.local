@@ -1,5 +1,14 @@
 #!/bin/bash
-raspi-config nonint do_wifi_country GB
+
+FILE_PATH="/first_run.sh"
+if [ -f "$FILE_PATH" ]; then
+    chmod +x "$FILE_PATH"
+    ./"$FILE_PATH"
+else
+    echo "rc.local - Not a first run"
+fi
+
+rraspi-config nonint do_wifi_country GB
 ifconfig wlan0 up
 
 nmcli device set wlan0 managed yes
