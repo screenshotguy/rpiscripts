@@ -138,9 +138,11 @@ if (isset($_POST['connect_ssid'])) {
     } else {
         $error = "Failed to connect to <strong>" . htmlspecialchars($ssid) . "</strong>: " 
                . htmlspecialchars(implode("\n", $output));
+        // Reset Wi-Fi interface and rescan to recover from failed attempt
+        exec("nmcli radio wifi off && nmcli radio wifi on 2>&1");
+        exec("nmcli dev wifi rescan 2>&1");
     }
 }
-
 // Handle Wi-Fi scan refresh action
 if (isset($_POST['scan_refresh'])) {
     exec("nmcli dev wifi rescan");  // trigger rescan of Wi-Fi networks
