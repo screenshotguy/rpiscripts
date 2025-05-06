@@ -660,7 +660,7 @@ foreach ($interfaces as $if) {
 </div><!-- end .container-fluid -->
 
 <!-- Bootstrap 5 JS (CDN); needed for tabs. Adjust if needed. -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/bootstrap.bundle.min.js"></script>
 
 <!-- Toggle visibility of static IP fields when radio changes -->
 <script>
