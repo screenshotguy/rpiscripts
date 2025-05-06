@@ -35,6 +35,19 @@ if (empty($_SESSION['logged_in'])) {
     echo '<title>Network Manager Login</title>';
     // Include Bootstrap 5 CSS (via CDN) for styling :contentReference[oaicite:12]{index=12}
     echo '<link href="/css/bootstrap.min.css" rel="stylesheet">';
+echo '<style>
+    table th, table td {
+        vertical-align: middle !important;
+    }
+    .form-check-inline {
+        margin-right: 0.5rem;
+    }
+    .form-control-sm {
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+    }
+</style>';
+
     echo '</head><body class="bg-light d-flex align-items-center justify-content-center" style="height:100vh;">';
     echo '<div class="card shadow-sm p-4" style="min-width:300px;">';
     echo '<h4 class="mb-3">Login</h4>';
@@ -58,6 +71,22 @@ if (empty($_SESSION['logged_in'])) {
 
 $message = '';  // success message to display
 $error   = '';  // error message to display
+
+// Handle deletion of saved NetworkManager connections
+if (isset($_POST['delete_connection'])) {
+    $connNameToDelete = $_POST['delete_connection'];
+    // Safely escape to avoid shell injection
+    $escaped = escapeshellarg($connNameToDelete);
+
+    // Run nmcli to delete the connection
+    exec("nmcli connection delete uuid $escaped 2>&1", $delOut, $delRet);
+    if ($delRet === 0) {
+        $message = "Connection <strong>" . htmlspecialchars($connNameToDelete) . "</strong> deleted successfully.";
+    } else {
+        $error = "Failed to delete connection <strong>" . htmlspecialchars($connNameToDelete) . "</strong>: " 
+               . htmlspecialchars(implode("\n", $delOut));
+    }
+}
 
 // Handle Wi-Fi connect action
 if (isset($_POST['connect_ssid'])) {
@@ -178,29 +207,84 @@ setlocale(LC_ALL, 'en_US.UTF-8');
 
 // Gather Wi-Fi network list via nmcli
 $wifi_list = [];
-exec("nmcli -t -f IN-USE,SSID,SECURITY,SIGNAL,BARS dev wifi list", $wifi_lines);  // scan results
+
+exec("LANG=en_US.UTF-8 nmcli -t --escape no -f IN-USE,BSSID,SSID,SECURITY,SIGNAL dev wifi list", $wifi_lines);
+
+
 foreach ($wifi_lines as $line) {
-    // Format: IN-USE:SSID:SECURITY:SIGNAL:BARS
-    $parts = explode(':', $line, 5);
-    if (count($parts) >= 5) {
-        $in_use  = ($parts[0] === '*');
-        $ssid    = $parts[1];
-        // If SSID isn’t valid UTF-8, convert it
-        if (!mb_check_encoding($ssid, 'UTF-8')) {
-            $ssid = mb_convert_encoding($ssid, 'UTF-8', 'ISO-8859-1,Windows-1252');
-        }
-        $security = ($parts[2] !== '') ? $parts[2] : 'OPEN';
-        $signal   = intval($parts[3]);
-        $bars     = $parts[4];
-        $wifi_list[] = [
-            'in_use'   => $in_use,
-            'ssid'     => $ssid ?: '(hidden)',
-            'security' => $security,
-            'signal'   => $signal,
-            'bars'     => $bars
+    // Skip empty or malformed lines
+    if (substr_count($line, ':') < 8) continue;
+
+    $parts = explode(':', $line);
+    $in_use = ($parts[0] === '*');
+
+    // BSSID is always 6 segments: parts[1] to parts[6]
+    $bssid = implode(':', array_slice($parts, 1, 6));
+
+    // The rest are SSID, SECURITY, SIGNAL
+    $ssid = $parts[7];
+    $security = $parts[8] ?? '';
+    $signal = isset($parts[9]) ? intval($parts[9]) : 0;
+
+    // Clean up text
+    $ssid = trim(preg_replace('/[^\\x20-\\x7E]/', '', $ssid));
+    $security = trim(preg_replace('/[^\\x20-\\x7E]/', '', $security));
+
+    $wifi_list[] = [
+        'in_use'   => $in_use,
+        'bssid'    => $bssid,
+        'ssid'     => $ssid ?: '(hidden)',
+        'security' => $security ?: 'OPEN',
+        'signal'   => $signal
+    ];
+}
+
+// Collect saved connections with more info
+$saved_connections = [];
+exec("nmcli -t -f NAME,UUID,TYPE,DEVICE connection show", $savedConnectionsOut);
+foreach ($savedConnectionsOut as $line) {
+    $parts = explode(':', $line, 4);
+    if (count($parts) === 4) {
+        $saved_connections[] = [
+            'name'  => $parts[0],
+            'uuid'  => $parts[1],
+            'type'  => $parts[2],
+            'device'=> $parts[3],
         ];
     }
 }
+
+// -- Saved Connections Card --
+echo '<div class="card mb-4">';
+echo '  <div class="card-header">Saved Connections</div>';
+echo '  <div class="card-body p-0">';
+if (empty($saved_connections)) {
+    echo '<div class="p-3 text-muted">No saved connections found.</div>';
+} else {
+    echo '<div class="table-responsive">';
+    echo '<table class="table table-sm table-hover mb-0">';
+    echo '<thead><tr><th>Name</th><th>UUID</th><th>Type</th><th>Device</th><th>Action</th></tr></thead><tbody>';
+    foreach ($saved_connections as $conn) {
+        echo '<tr>';
+        echo '  <td>' . htmlspecialchars($conn['name']) . '</td>';
+        echo '  <td style="font-family: monospace;">' . htmlspecialchars($conn['uuid']) . '</td>';
+        echo '  <td>' . htmlspecialchars($conn['type']) . '</td>';
+        echo '  <td>' . ($conn['device'] ? htmlspecialchars($conn['device']) : '-') . '</td>';
+        echo '  <td>';
+        echo '    <form method="post" class="m-0">';
+        echo '      <input type="hidden" name="delete_connection" value="' . htmlspecialchars($conn['uuid']) . '">';
+        echo '      <button type="submit" class="btn btn-sm btn-danger">Delete</button>';
+        echo '    </form>';
+        echo '  </td>';
+        echo '</tr>';
+    }
+    echo '</tbody></table></div>';
+}
+echo '  </div>';
+echo '</div>';
+
+
+
 // Gather interface statuses for wlan0, eth0, usb0
 $interfaces = ['wlan0', 'eth0', 'usb0'];
 $iface_status = [];
@@ -260,6 +344,19 @@ echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">';
 echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
 echo '<title>Network Manager</title>';
 echo '<link href="/css/bootstrap.min.css" rel="stylesheet">';
+echo '
+<style>
+    table th, table td {
+        vertical-align: middle !important;
+    }
+    .form-check-inline {
+        margin-right: 0.5rem;
+    }
+    .form-control-sm {
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+    }
+</style>';
 echo '<style> body { padding:20px; } </style>';  // minor padding
 echo '</head><body>';
 echo '<div class="container-fluid">';
@@ -303,27 +400,39 @@ foreach ($iface_status as $if => $st) {
     echo '<td>' . ($st['mac'] ? htmlspecialchars($st['mac']) : '-') . '</td>';
     echo '<td>' . ($st['method'] ? htmlspecialchars($st['method']) : '-') . '</td>';
     // Configuration form (inline) for switching DHCP/Static
-    echo '<td>';
-    echo '<form method="post" class="d-flex align-items-center">';
-    echo '<input type="hidden" name="iface" value="' . htmlspecialchars($if) . '">';
-    $isStatic = ($st['method'] === 'Static');
-    // Radio buttons for DHCP vs Static
-    echo '<div class="form-check form-check-inline">';
-    echo '<input class="form-check-input" type="radio" name="ip_mode" id="'.$if.'_dhcp" value="dhcp" '.($isStatic ? '' : 'checked').'>';
-    echo '<label class="form-check-label" for="'.$if.'_dhcp">DHCP</label></div>';
-    echo '<div class="form-check form-check-inline">';
-    echo '<input class="form-check-input" type="radio" name="ip_mode" id="'.$if.'_static" value="static" '.($isStatic ? 'checked' : '').'>';
-    echo '<label class="form-check-label" for="'.$if.'_static">Static</label></div>';
-    // Static IP input fields (shown if Static selected; simple show/hide handled by a bit of JS below)
-    echo '<div class="ms-2">';
-    echo '<input type="text" class="form-control form-control-sm mb-1 static-field" name="static_ip" placeholder="IP Address" value="'. ($isStatic && $st['ip'] ? htmlspecialchars($st['ip']) : '') .'" style="max-width:150px; '.($isStatic ? '' : 'display:none;').'">';
-    echo '<input type="text" class="form-control form-control-sm mb-1 static-field" name="static_mask" placeholder="Netmask" value="" style="max-width:150px; '.($isStatic ? '' : 'display:none;').'">';
-    echo '<input type="text" class="form-control form-control-sm mb-1 static-field" name="static_gw" placeholder="Gateway" value="" style="max-width:150px; '.($isStatic ? '' : 'display:none;').'">';
-    echo '<input type="text" class="form-control form-control-sm mb-1 static-field" name="static_dns" placeholder="DNS (comma-separated)" value="" style="max-width:200px; '.($isStatic ? '' : 'display:none;').'">';
-    echo '</div>';
-    echo '<button type="submit" class="btn btn-sm btn-primary ms-2">Apply</button>';
-    echo '</form>';
-    echo '</td>';
+
+
+echo '<td>';
+echo '<form method="post" class="d-flex align-items-center flex-nowrap gap-2">';
+echo '<input type="hidden" name="iface" value="' . htmlspecialchars($if) . '">';
+
+// DHCP/Static Radio
+echo '<div class="form-check form-check-inline m-0">';
+echo '<input class="form-check-input ip-mode-toggle" type="radio" name="ip_mode" value="dhcp" id="'.$if.'_dhcp" '.($isStatic ? '' : 'checked').'>';
+echo '<label class="form-check-label" for="'.$if.'_dhcp">DHCP</label>';
+echo '</div>';
+
+echo '<div class="form-check form-check-inline m-0">';
+echo '<input class="form-check-input ip-mode-toggle" type="radio" name="ip_mode" value="static" id="'.$if.'_static" '.($isStatic ? 'checked' : '').'>';
+echo '<label class="form-check-label" for="'.$if.'_static">Static</label>';
+echo '</div>';
+
+// Static IP Fields (initially hidden if DHCP selected)
+$staticClass = $isStatic ? '' : 'd-none';
+echo '<div class="static-fields d-flex flex-nowrap align-items-center gap-2 ' . $staticClass . '">';
+echo '<input type="text" class="form-control form-control-sm static-field" name="static_ip" placeholder="IP" style="max-width:120px;">';
+echo '<input type="text" class="form-control form-control-sm static-field" name="static_mask" placeholder="Mask" style="max-width:100px;">';
+echo '<input type="text" class="form-control form-control-sm static-field" name="static_gw" placeholder="Gateway" style="max-width:120px;">';
+echo '<input type="text" class="form-control form-control-sm static-field" name="static_dns" placeholder="DNS" style="max-width:140px;">';
+echo '</div>';
+
+// Apply button
+echo '<button type="submit" class="btn btn-sm btn-primary">Apply</button>';
+echo '</form>';
+echo '</td>';
+
+
+
     echo '</tr>';
 }
 echo '</tbody></table></div>';
@@ -341,45 +450,68 @@ echo '<thead><tr><th>SSID</th><th>Signal</th><th>Security</th><th></th></tr></th
 if (empty($wifi_list)) {
     echo '<tr><td colspan="4" class="text-muted">No networks found.</td></tr>';
 } else {
-    foreach ($wifi_list as $net) {
-        $ssid_display = $net['ssid'] !== '' ? htmlspecialchars($net['ssid']) : '<em>(Hidden)</em>';
-        echo '<tr' . ($net['in_use'] ? ' class="table-success"' : '') . '>';
-        echo "<td>$ssid_display</td>";
-        // Show signal bars and percentage
-        echo '<td>' . htmlspecialchars($net['bars']) . ' ' . $net['signal'] . '%</td>';
-        echo '<td>' . htmlspecialchars($net['security']) . '</td>';
-        echo '<td>';
-        if ($net['in_use']) {
-            echo '<span class="text-success">Connected</span>';
-        } else {
-            // Wi-Fi connect form for this network
-            echo '<form method="post" class="d-flex align-items-center m-0">';
-            echo '<input type="hidden" name="connect_ssid" value="'. htmlspecialchars($net['ssid']) .'">';
-            if (stripos($net['security'], 'WPA') !== false) {
-                echo '<input type="password" name="wifi_password" class="form-control form-control-sm me-2" placeholder="Password" required>';
-            }
-            echo '<button type="submit" class="btn btn-sm btn-primary">Connect</button>';
-            echo '</form>';
-        }
-        echo '</td></tr>';
+
+foreach ($wifi_list as $net) {
+    $ssid_display = $net['ssid'] !== '' ? htmlspecialchars($net['ssid']) : '<em>(Hidden)</em>';
+    $bssid_display = '<small class="text-muted" style="font-size: 80%; font-family: monospace;">' . htmlspecialchars($net['bssid']) . '</small>';
+
+    $signalPercent = intval($net['signal']);
+    $signalColor = 'bg-danger';
+    if ($signalPercent >= 75) $signalColor = 'bg-success';
+    elseif ($signalPercent >= 50) $signalColor = 'bg-warning';
+
+    echo '<tr' . ($net['in_use'] ? ' class="table-success"' : '') . '>';
+
+    // SSID + BSSID
+    echo "<td>$ssid_display<br>$bssid_display</td>";
+
+    // Signal bar
+    echo '<td style="min-width:100px;">';
+    echo '<div class="progress" style="height: 4px;">';
+    echo '<div class="progress-bar ' . $signalColor . '" role="progressbar" style="width: ' . $signalPercent . '%;" aria-valuenow="' . $signalPercent . '" aria-valuemin="0" aria-valuemax="100"></div>';
+    echo '</div>';
+    echo '<small class="text-muted">' . $signalPercent . '%</small>';
+    echo '</td>';
+
+    // Security
+    echo '<td>' . htmlspecialchars($net['security']) . '</td>';
+
+    // Connect button or Connected indicator
+    echo '<td>';
+    if ($net['in_use']) {
+        echo '<span class="text-success">Connected</span>';
+    } else {
+        echo '<form method="post" class="wifi-form d-flex align-items-center m-0" data-requires-password="' . 
+             (stripos($net["security"], "WPA") !== false ? "true" : "false") . '">';
+        echo '<input type="hidden" name="connect_ssid" value="'. htmlspecialchars($net['ssid']) .'">';
+        echo '<div class="form-elements d-flex align-items-center">';
+        echo '<button type="button" class="btn btn-sm btn-primary connect-btn">Connect</button>';
+        echo '</div>';
+        echo '</form>';
     }
+    echo '</td></tr>';
+}
+
 }
 echo '</tbody></table></div>';
 echo '</div></div>';  // end card
 
 // Simple JavaScript to toggle visibility of static IP fields when radio changes
 echo '<script>
-        document.querySelectorAll("input[name=\'ip_mode\']").forEach(radio => {
-            radio.addEventListener("change", function() {
-                const form = this.closest("form");
-                if (!form) return;
-                const showStatic = this.value === "static";
-                form.querySelectorAll(".static-field").forEach(field => {
-                    field.style.display = showStatic ? "" : "none";
-                });
-            });
+document.addEventListener("DOMContentLoaded", function () {
+    // Toggle visibility of static IP fields
+    document.querySelectorAll(".ip-mode-toggle").forEach(function (radio) {
+        radio.addEventListener("change", function () {
+            const form = this.closest("form");
+            const showStatic = this.value === "static";
+            const fields = form.querySelector(".static-fields");
+            if (fields) {
+                fields.classList.toggle("d-none", !showStatic);
+            }
         });
-      </script>';
+    });
+});
+</script>';
 
 echo '</div></body></html>';
 ?>
