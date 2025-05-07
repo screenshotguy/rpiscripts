@@ -139,13 +139,16 @@ function renderMainPage($message, $error, $wifi_list, $saved_connections, $iface
   </style>
 </head>
 <body>
-<div class="container-fluid">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="m-0">Network Manager</h3>
-    <form method="get" class="m-0">
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="m-0">Network Manager</h3>
+  <div>
+    <a href="http://<?php echo $_SERVER['SERVER_ADDR']; ?>:4200" target="_blank" class="btn btn-outline-success btn-sm me-2">Terminal</a>
+    <a href="/" class="btn btn-outline-primary btn-sm me-2">Home</a>
+    <form method="get" class="d-inline">
       <button type="submit" name="logout" class="btn btn-outline-secondary btn-sm">Logout</button>
     </form>
   </div>
+</div>
 
   <?php if ($message): ?>
     <div class="alert alert-success"><?= $message ?></div>
